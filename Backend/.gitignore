@@ -1,0 +1,23 @@
+# Secrets et configuration sensible
+.env
+*.env
+application.properties
+application-*.properties
+
+# Fichiers uploadés par les utilisateurs
+media-1/uploads/
+*.mp4
+*.avi
+*.mov
+
+# IDE
+.idea/
+*.iml
+
+# Build
+target/
+*.class
+
+# Python
+__pycache__/
+*.pyc

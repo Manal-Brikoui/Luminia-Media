@@ -1,0 +1,63 @@
+services:
+
+  postgres:
+    image: postgres:17
+    container_name: auth_postgres
+    environment:
+      POSTGRES_DB: mediatheque_auth
+      POSTGRES_USER: auth_user
+      POSTGRES_PASSWORD: auth_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - mediatheque_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auth_user -d mediatheque_auth"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  auth-svc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auth_svc
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_APPLICATION_NAME: auth-svc
+      SERVER_PORT: 8081
+      JWT_SECRET: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+      JWT_EXPIRATION: 86400000
+      SPRING_MAIL_HOST: smtp.gmail.com
+      SPRING_MAIL_PORT: 587
+      SPRING_MAIL_USERNAME: manalbk814@gmail.com
+      SPRING_MAIL_PASSWORD: rcpofjgfxhbmamdz
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: true
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: true
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_REQUIRED: true
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/mediatheque_auth
+      SPRING_DATASOURCE_USERNAME: auth_user
+      SPRING_DATASOURCE_PASSWORD: auth_password
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: true
+      SPRING_JPA_PROPERTIES_HIBERNATE_FORMAT_SQL: true
+      SPRING_JPA_OPEN_IN_VIEW: false
+      APP_FRONTEND_URL: http://localhost:4200
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY_CONFIG_ANNOTATION_AUTHENTICATION_CONFIGURATION_INITIALIZEUSERDETAILSBEANMANAGERCONFIGURER: ERROR
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - mediatheque_network
+    restart: on-failure
+
+networks:
+  mediatheque_network:
+    driver: bridge
+
+volumes:
+  postgres_data:

@@ -1,0 +1,274 @@
+name: CI — Mediatheque Microservices
+
+on:
+  push:
+    branches: ["main", "develop"]
+  pull_request:
+    branches: ["main", "develop"]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/mediatheque
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # 1. auth-svc
+  # ──────────────────────────────────────────────────────────────────────────
+  auth-svc:
+    name: auth-svc · build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+
+      - name: Cache Maven
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: maven-auth-${{ hashFiles('pfa-/pom.xml') }}
+          restore-keys: maven-auth-
+
+      - name: Build & test
+        working-directory: pfa-
+        run: mvn clean verify -B
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 2. media-svc
+  # ──────────────────────────────────────────────────────────────────────────
+  media-svc:
+    name: media-svc · build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+
+      - name: Cache Maven
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: maven-media-${{ hashFiles('media-1/pom.xml') }}
+          restore-keys: maven-media-
+
+      - name: Build & test
+        working-directory: media-1
+        run: mvn clean package -B -DskipTests
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 3. collection-svc
+  # ──────────────────────────────────────────────────────────────────────────
+  collection-svc:
+    name: collection-svc · build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+
+      - name: Cache Maven
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: maven-collection-${{ hashFiles('Collection1/pom.xml') }}
+          restore-keys: maven-collection-
+
+      - name: Build & test
+        working-directory: Collection1
+        run: mvn clean verify -B
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 4. notification-svc
+  # ──────────────────────────────────────────────────────────────────────────
+  notification-svc:
+    name: notification-svc · build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+
+      - name: Cache Maven
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: maven-notification-${{ hashFiles('notification-1/pom.xml') }}
+          restore-keys: maven-notification-
+
+      - name: Build & test
+        working-directory: notification-1
+        run: mvn clean package -B -DskipTests
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 5. ai-svc
+  # ──────────────────────────────────────────────────────────────────────────
+  ai-svc:
+    name: ai-svc · build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ hashFiles('ai/requirements.txt') }}
+          restore-keys: pip-
+
+      - name: Install dependencies
+        working-directory: ai
+        run: pip install -r requirements.txt
+
+      - name: Lint & tests
+        working-directory: ai
+        run: |
+          pip install flake8 pytest pytest-cov
+          flake8 . --count --max-line-length=120 --statistics || true
+          pytest --cov=app --cov-report=xml:coverage.xml || true
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 6. SonarCloud scan
+  # ──────────────────────────────────────────────────────────────────────────
+  sonar:
+    name: SonarCloud scan
+    runs-on: ubuntu-latest
+    needs: [auth-svc, media-svc, collection-svc, notification-svc, ai-svc]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Compiler chaque service + copier les JARs de dépendances dans target/dependency
+      - name: Compile auth-svc + copy deps
+        working-directory: pfa-
+        run: |
+          mvn clean compile -B -q
+          mvn dependency:copy-dependencies -DoutputDirectory=target/dependency -q || true
+
+      - name: Compile media-svc + copy deps
+        working-directory: media-1
+        run: |
+          mvn clean compile -B -q
+          mvn dependency:copy-dependencies -DoutputDirectory=target/dependency -q || true
+
+      - name: Compile collection-svc + copy deps
+        working-directory: Collection1
+        run: |
+          mvn clean compile -B -q
+          mvn dependency:copy-dependencies -DoutputDirectory=target/dependency -q || true
+
+      - name: Compile notification-svc + copy deps
+        working-directory: notification-1
+        run: |
+          mvn clean compile -B -q
+          mvn dependency:copy-dependencies -DoutputDirectory=target/dependency -q || true
+
+      - name: Python coverage
+        run: |
+          pip install -r ai/requirements.txt pytest pytest-cov
+          pytest ai/ --cov=ai --cov-report=xml:ai/coverage.xml || true
+
+      - name: SonarCloud scan
+        uses: SonarSource/sonarqube-scan-action@v2
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        with:
+          args: >
+            -Dsonar.projectKey=Manal-Brikoui_mediatheque-project
+            -Dsonar.projectName=mediatheque-project
+            -Dsonar.organization=manal-brikoui
+            -Dsonar.sources=pfa-/src/main,media-1/src/main,Collection1/src/main,notification-1/src/main,ai
+            -Dsonar.java.binaries=pfa-/target/classes,media-1/target/classes,Collection1/target/classes,notification-1/target/classes
+            -Dsonar.java.libraries=pfa-/target/dependency,media-1/target/dependency,Collection1/target/dependency,notification-1/target/dependency
+            -Dsonar.python.version=3.11
+            -Dsonar.python.coverage.reportPaths=ai/coverage.xml
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 7. Docker build & push
+  # ──────────────────────────────────────────────────────────────────────────
+  docker-build-push:
+    name: Docker build & push
+    runs-on: ubuntu-latest
+    needs: sonar
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - service: auth-svc
+            context: pfa-
+          - service: media-svc
+            context: media-1
+          - service: collection-svc
+            context: Collection1
+          - service: notification-svc
+            context: notification-1
+          - service: ai-svc
+            context: ai
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set lowercase owner
+        id: lower
+        run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Build & push ${{ matrix.service }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.lower.outputs.owner }}/mediatheque/${{ matrix.service }}:latest
+            ${{ env.REGISTRY }}/${{ steps.lower.outputs.owner }}/mediatheque/${{ matrix.service }}:${{ github.sha }}
